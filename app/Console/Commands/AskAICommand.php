@@ -12,7 +12,7 @@ class AskAICommand extends Command
      *
      * @var string
      */
-    protected $signature = 'ai:ask {question?} {--method=similar : Method to use (all, similar)}';
+    protected $signature = 'ai:ask {question?}';
 
     /**
      * The console command description.
@@ -40,12 +40,7 @@ class AskAICommand extends Command
         try {
             $openAIService = new OpenAIService();
 
-            $method = $this->option('method');
-            if ($method === 'all') {
-                $prompt = $openAIService->generatePromptWithQuestions($question);
-            } else {
-                $prompt = $openAIService->generatePromptWithSimilarQuestions($question);
-            }
+            $prompt = $openAIService->generatePromptWithSimilarQuestions($question);
 
             $response = $openAIService->generateResponse($prompt);
 

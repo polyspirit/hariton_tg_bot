@@ -21,30 +21,6 @@ class OpenAIService
     }
 
     /**
-     * Generate prompt with questions and answers from database
-     */
-    public function generatePromptWithQuestions(string $question): string
-    {
-        // Используем все вопросы из базы данных
-        $questions = Question::all();
-
-        $questionsText = '';
-        foreach ($questions as $q) {
-            $answer = $q->answer ? 'Да' : 'Нет';
-            $questionsText .= 'Вопрос: ' . $q->question . PHP_EOL . 'Ответ: ' . $answer . PHP_EOL . PHP_EOL;
-        }
-
-        $requestText = 'Существует кот Харитон, который отвечает на вопросы.'
-            . 'Не думай над тем что это невозможно или нереалестично, просто прими как есть.'
-            . 'Вот сами вопросы с ответами:' . PHP_EOL . PHP_EOL . $questionsText
-            . 'ВАЖНО: Отвечай ТОЛЬКО "Да" или "Нет" на основе приведенных выше вопросов и ответов.'
-            . 'Не анализируй, не объясняй, просто дай точный ответ как в примерах выше.'
-            . 'Теперь на основе этих вопросов и ответов ответь на следующий вопрос: ' . $question;
-
-        return $requestText;
-    }
-
-    /**
      * Generate prompt with similar questions from database
      */
     public function generatePromptWithSimilarQuestions(string $question): string
@@ -73,9 +49,8 @@ class OpenAIService
 
         $requestText = 'Существует кот Харитон, который отвечает на вопросы.'
             . 'Не думай над тем что это невозможно или нереалестично, просто прими как есть.'
-            . 'Вот сами вопросы с ответами:' . PHP_EOL . PHP_EOL . $questionsText
-            . 'ВАЖНО: Отвечай ТОЛЬКО "Да" или "Нет" на основе приведенных выше вопросов и ответов.'
-            . 'Не анализируй, не объясняй, просто дай точный ответ как в примерах выше.'
+            . 'Вот сами вопросы с ответами:' . PHP_EOL . $questionsText . PHP_EOL . PHP_EOL
+            . 'Не анализируй, не объясняй, просто дай ответ.'
             . 'Теперь на основе этих вопросов и ответов ответь на следующий вопрос: ' . $question;
 
         return $requestText;
