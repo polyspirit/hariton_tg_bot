@@ -2281,11 +2281,16 @@ class QuestionSeeder extends Seeder
             $topicId = $this->getTopicId($questionData['topic']);
 
             if ($topicId) {
-                Question::create([
-                    'topic_id' => $topicId,
-                    'question' => $questionData['question'],
-                    'answer' => $questionData['answer']
-                ]);
+                // Check if question already exists
+                $existingQuestion = Question::where('question', $questionData['question'])->first();
+
+                if (!$existingQuestion) {
+                    Question::create([
+                        'topic_id' => $topicId,
+                        'question' => $questionData['question'],
+                        'answer' => $questionData['answer']
+                    ]);
+                }
             }
         }
     }
