@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\QuestionTopic;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class QuestionTopicSeeder extends Seeder
@@ -13,7 +12,30 @@ class QuestionTopicSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create 10 sample question topics
-        QuestionTopic::factory(10)->create();
+        $topics = [
+            'Бог и религия',
+            'Инопланетяне и НЛО',
+            'Будущее и предсказания',
+            'Смерть и загробная жизнь',
+            'Правительство и заговоры',
+            'Здоровье и медицина',
+            'Войны и конфликты',
+            'Мистика и магия',
+            'Политика и лидеры',
+            'Экономика и деньги',
+            'Наука и технологии',
+            'Семья и отношения',
+            'Природа и экология',
+            'Культура и искусство',
+            'История и археология',
+            'Личные вопросы'
+        ];
+
+        foreach ($topics as $topic) {
+            QuestionTopic::firstOrCreate(
+                ['topic' => $topic],
+                ['topic' => $topic]
+            );
+        }
     }
 }
