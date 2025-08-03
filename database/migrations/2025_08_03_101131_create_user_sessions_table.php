@@ -14,12 +14,12 @@ return new class extends Migration
         Schema::create('user_sessions', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('telegram_user_id')->unique();
-            $table->string('state')->nullable();
+            $table->string('state', 100)->nullable();
             $table->json('data')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
 
-            $table->index(['telegram_user_id', 'state']);
+            $table->index(['telegram_user_id', 'state'], 'user_sessions_telegram_user_id_state_index');
             $table->index('expires_at');
         });
     }
