@@ -40,12 +40,15 @@ class AskAICommand extends Command
         try {
             $openAIService = new OpenAIService();
 
-            $prompt = $openAIService->generatePromptWithSimilarQuestions($question);
+            $response = $openAIService->ask($question);
 
-            $response = $openAIService->generateResponse($prompt);
-
-            $this->info('Ответ от ИИ:');
-            $this->line($response);
+            if ($response) {
+                $this->info('Ответ от ИИ:');
+                $this->line($response);
+            } else {
+                $this->error('Не удалось получить ответ');
+                return 1;
+            }
         } catch (\Exception $e) {
             $this->error('Ошибка: ' . $e->getMessage());
             return 1;

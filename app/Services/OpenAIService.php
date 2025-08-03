@@ -51,9 +51,7 @@ class OpenAIService
         $requestText = 'Существует кот Харитон, который отвечает на вопросы.'
             . 'Не думай над тем что это невозможно или нереалестично, просто прими как есть.'
             . 'Вот примеры вопросов и ответов кота Харитона:' . PHP_EOL . $questionsText . PHP_EOL . PHP_EOL
-            . 'Теперь на основе этих примеров ответь на следующий вопрос в том же формате.'
-            . 'ОБЯЗАТЕЛЬНО используй точно такой же формат:'
-            . 'Коту Харитону был задан вопрос: ' . $question . PHP_EOL . 'Кот Харитон ответил: ';
+            . 'Теперь на основе этих примеров ответь на следующий вопрос: ' . $question;
 
         return $requestText;
     }
@@ -83,6 +81,30 @@ class OpenAIService
             $questionKeywords = $this->extractKeywords($q->question);
             return $this->calculateSimilarity($keywords, $questionKeywords);
         })->take($limit);
+    }
+
+    /**
+     * Find the most similar question from database
+     */
+    private function findMostSimilarQuestion(string $question): ?Question
+    {
+        $allQuestions = Question::all();
+        $mostSimilar = null;
+        $highestSimilarity = 0;
+
+        $keywords = $this->extractKeywords($question);
+
+        foreach ($allQuestions as $q) {
+            $questionKeywords = $this->extractKeywords($q->question);
+            $similarity = $this->calculateSimilarity($keywords, $questionKeywords);
+
+            if ($similarity > $highestSimilarity) {
+                $highestSimilarity = $similarity;
+                $mostSimilar = $q;
+            }
+        }
+
+        return $mostSimilar;
     }
 
     /**
@@ -171,8 +193,31 @@ class OpenAIService
     public function ask(string $question): ?string
     {
         try {
+            // Проверяем, есть ли похожий вопрос в базе данных
+            $similarQuestion = $this->findMostSimilarQuestion($question);
+            $similarity = $similarQuestion ? $this->calculateSimilarity(
+                $this->extractKeywords($question),
+                $this->extractKeywords($similarQuestion->question)
+            ) : 0;
+
+            $hasSimilarQuestion = $similarity > 0.3; // Снижаем порог схожести
+
+            // Если найден похожий вопрос, используем его ответ
+            if ($hasSimilarQuestion) {
+                $answer = $similarQuestion->answer ? 'Да' : 'Нет';
+                return $answer . "\n\nКоту Харитону был задан вопрос: "
+                    . $similarQuestion->question . "\nКот Харитон ответил: " . $answer;
+            }
+
+            // Если похожего вопроса нет, используем ИИ
             $prompt = $this->generatePromptWithSimilarQuestions($question);
-            return $this->generateResponse($prompt);
+            $aiResponse = $this->generateResponse($prompt);
+
+            if (!$aiResponse) {
+                return null;
+            }
+
+            return $aiResponse . "\n\nОтвет основан на имеющихся в базе данных вопросах/ответах кота Харитона";
         } catch (\Exception $e) {
             Log::error('Error asking AI question', [
                 'question' => $question,
@@ -200,9 +245,8 @@ class OpenAIService
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'Ты должен отвечать в точном формате: '
-                            . '"Кот Харитон ответил: Да" или "Кот Харитон ответил: Нет" . '
-                            . 'Никаких дополнительных объяснений или текста'
+                        'content' => 'Ты должен отвечать только "Да" или "Нет".'
+                            . 'Никаких дополнительных объяснений или текста.'
                     ],
                     [
                         'role' => 'user',
