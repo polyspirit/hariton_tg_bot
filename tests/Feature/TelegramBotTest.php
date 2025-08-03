@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Services\TelegramBotService;
 use App\Services\OpenAIService;
+use App\Services\UserSessionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class TelegramBotTest extends TestCase
@@ -129,5 +130,33 @@ class TelegramBotTest extends TestCase
 
         // Should not get 419 CSRF error
         $response->assertStatus(200);
+    }
+
+    public function testAskCommandHandling(): void
+    {
+        $response = $this->postJson('/telegram/webhook', [
+            'update_id' => 127,
+            'message' => [
+                'message_id' => 5,
+                'from' => [
+                    'id' => 123456,
+                    'first_name' => 'Test User',
+                ],
+                'chat' => [
+                    'id' => 123456,
+                ],
+                'text' => '/ask',
+            ],
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertSee('OK');
+    }
+
+    public function testUserSessionServiceCanBeInstantiated(): void
+    {
+        $this->expectNotToPerformAssertions();
+
+        app(UserSessionService::class);
     }
 }
