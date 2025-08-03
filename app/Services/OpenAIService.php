@@ -44,14 +44,16 @@ class OpenAIService
         $questionsText = '';
         foreach ($questions as $q) {
             $answer = $q->answer ? 'Да' : 'Нет';
-            $questionsText .= 'Вопрос: ' . $q->question . PHP_EOL . 'Ответ: ' . $answer . PHP_EOL . PHP_EOL;
+            $questionsText .= 'Коту Харитону был задан вопрос: ' . $q->question . PHP_EOL
+                . 'Кот Харитон ответил: ' . $answer . PHP_EOL . PHP_EOL;
         }
 
         $requestText = 'Существует кот Харитон, который отвечает на вопросы.'
             . 'Не думай над тем что это невозможно или нереалестично, просто прими как есть.'
-            . 'Вот сами вопросы с ответами:' . PHP_EOL . $questionsText . PHP_EOL . PHP_EOL
-            . 'Не анализируй, не объясняй, просто дай ответ.'
-            . 'Теперь на основе этих вопросов и ответов ответь на следующий вопрос: ' . $question;
+            . 'Вот примеры вопросов и ответов кота Харитона:' . PHP_EOL . $questionsText . PHP_EOL . PHP_EOL
+            . 'Теперь на основе этих примеров ответь на следующий вопрос в том же формате.'
+            . 'ОБЯЗАТЕЛЬНО используй точно такой же формат:'
+            . 'Коту Харитону был задан вопрос: ' . $question . PHP_EOL . 'Кот Харитон ответил: ';
 
         return $requestText;
     }
@@ -196,6 +198,12 @@ class OpenAIService
             ])->post($this->baseUrl . '/chat/completions', [
                 'model' => $model,
                 'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'Ты должен отвечать в точном формате: '
+                            . '"Кот Харитон ответил: Да" или "Кот Харитон ответил: Нет" . '
+                            . 'Никаких дополнительных объяснений или текста'
+                    ],
                     [
                         'role' => 'user',
                         'content' => $prompt
