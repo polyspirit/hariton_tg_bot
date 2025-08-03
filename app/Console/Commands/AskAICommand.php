@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Services\OpenAIService;
 use Illuminate\Console\Command;
+use App\Services\OpenAIService;
 
 class AskAICommand extends Command
 {

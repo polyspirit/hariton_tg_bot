@@ -164,6 +164,23 @@ class OpenAIService
     }
 
     /**
+     * Ask a question and get AI response
+     */
+    public function ask(string $question): ?string
+    {
+        try {
+            $prompt = $this->generatePromptWithSimilarQuestions($question);
+            return $this->generateResponse($prompt);
+        } catch (\Exception $e) {
+            Log::error('Error asking AI question', [
+                'question' => $question,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Generate response using OpenAI API
      */
     public function generateResponse(
