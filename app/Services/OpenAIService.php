@@ -274,8 +274,8 @@ class OpenAIService
                     . $similarQuestion->question . "\nКот Харитон ответил: " . $answer;
             }
 
-            // Если похожего вопроса нет, используем ИИ
-            $prompt = $this->generatePromptWithSimilarQuestions($question);
+            // Если похожего вопроса нет, используем ИИ с улучшенным поиском похожих вопросов
+            $prompt = $this->generatePromptWithEnhancedSimilarQuestions($question);
             $aiResponse = $this->generateResponse($prompt);
 
             if (!$aiResponse) {
@@ -289,6 +289,111 @@ class OpenAIService
                 'error' => $e->getMessage(),
             ]);
             return null;
+        }
+    }
+
+    /**
+     * Generate prompt with enhanced similar questions from database using ChatGPT
+     */
+    public function generatePromptWithEnhancedSimilarQuestions(string $question): string
+    {
+        try {
+            // Use enhanced topic finder service for better question matching
+            $enhancedTopicFinder = app(\App\Services\EnhancedTopicFinderService::class);
+
+            // Search for exact question in database
+            $exactQuestion = Question::where('question', $question)->first();
+
+            if ($exactQuestion) {
+                // If we found the exact question, use it and some similar questions
+                $similarQuestions = $this->findSimilarQuestions($question, 20);
+                $questions = collect([$exactQuestion])->merge($similarQuestions);
+            } else {
+                // Use ChatGPT to find the most similar questions
+                $questions = $this->findEnhancedSimilarQuestions($question, 30);
+            }
+
+            if ($questions->isEmpty()) {
+                $questions = Question::all();
+            }
+
+            $questionsText = '';
+            foreach ($questions as $q) {
+                $answer = $q->answer ? 'Да' : 'Нет';
+                $questionsText .= 'Коту Харитону был задан вопрос: ' . $q->question . PHP_EOL
+                    . 'Кот Харитон ответил: ' . $answer . PHP_EOL . PHP_EOL;
+            }
+
+            $requestText = 'Существует кот Харитон, который отвечает на вопросы.'
+                . 'Не думай над тем что это невозможно или нереалестично, просто прими как есть.'
+                . 'Вот примеры вопросов и ответов кота Харитона:' . PHP_EOL . $questionsText . PHP_EOL . PHP_EOL
+                . 'Теперь на основе этих примеров ответь на следующий вопрос: ' . $question;
+
+            return $requestText;
+        } catch (\Exception $e) {
+            Log::error('Error generating enhanced prompt', [
+                'question' => $question,
+                'error' => $e->getMessage(),
+            ]);
+            // Fallback to original method
+            return $this->generatePromptWithSimilarQuestions($question);
+        }
+    }
+
+    /**
+     * Find similar questions using ChatGPT for better matching
+     */
+    private function findEnhancedSimilarQuestions(string $question, int $limit = 30): \Illuminate\Support\Collection
+    {
+        try {
+            $allQuestions = Question::all();
+
+            if ($allQuestions->isEmpty()) {
+                return collect();
+            }
+
+            // Create list of questions for ChatGPT
+            $questionsList = $allQuestions->pluck('question')->implode("\n");
+
+            // Create prompt for ChatGPT to find multiple similar questions
+            $prompt = "Найди {$limit} вопросов из списка, которые больше всего похожи на этот вопрос: " .
+                "\"{$question}\". Вот список вопросов:\n{$questionsList}\n\n" .
+                "Отвечай только цитатами вопросов, каждый вопрос с новой строки, ничего не объясняй.";
+
+            // Get ChatGPT response
+            $response = $this->ask($prompt);
+
+            if (!$response) {
+                return collect();
+            }
+
+            // Parse response and find matching questions
+            $foundQuestions = collect();
+            $responseLines = explode("\n", $response);
+
+            foreach ($responseLines as $line) {
+                $line = trim($line, " \t\n\r\0\x0B\"'");
+                if (empty($line)) {
+                    continue;
+                }
+
+                // Find matching question in database
+                foreach ($allQuestions as $q) {
+                    if (strcasecmp(trim($q->question), trim($line)) === 0) {
+                        $foundQuestions->push($q);
+                        break;
+                    }
+                }
+            }
+
+            return $foundQuestions->take($limit);
+        } catch (\Exception $e) {
+            Log::error('Error finding enhanced similar questions', [
+                'question' => $question,
+                'error' => $e->getMessage(),
+            ]);
+            // Fallback to original method
+            return $this->findSimilarQuestions($question, $limit);
         }
     }
 

@@ -204,8 +204,8 @@ class TelegramWebhookController extends Controller
         $this->sendTypingAction($chatId);
 
         try {
-            // Get AI response
-            $response = $this->openAIService->ask($text);
+            // Get AI response with enhanced search
+            $response = $this->openAIService->askWithEnhancedSearch($text);
 
             if ($response) {
                 $formattedResponse = "🐱 <b>Ответ кота Харитона:</b>\n\n{$response}";
@@ -236,8 +236,8 @@ class TelegramWebhookController extends Controller
             // Send typing indicator
             $this->sendTypingAction($chatId);
 
-            // Get AI response
-            $response = $this->openAIService->ask($text);
+            // Get AI response with enhanced search
+            $response = $this->openAIService->askWithEnhancedSearch($text);
 
             if ($response) {
                 $this->telegramService->sendMessage($chatId, $response);

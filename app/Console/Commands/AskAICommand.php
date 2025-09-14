@@ -40,7 +40,7 @@ class AskAICommand extends Command
         try {
             $openAIService = new OpenAIService();
 
-            $response = $openAIService->ask($question);
+            $response = $openAIService->askWithEnhancedSearch($question);
 
             if ($response) {
                 $this->info('Ответ от ИИ:');
