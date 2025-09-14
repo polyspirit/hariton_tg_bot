@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\TelegramBotService;
 use App\Services\OpenAIService;
 use App\Services\UserSessionService;
+use App\Services\TopicFinderService;
 use App\Models\TelegramUser;
 use App\Models\Question;
 use App\Models\QuestionTopic;
@@ -17,15 +18,18 @@ class TelegramWebhookController extends Controller
     private TelegramBotService $telegramService;
     private OpenAIService $openAIService;
     private UserSessionService $sessionService;
+    private TopicFinderService $topicFinderService;
 
     public function __construct(
         TelegramBotService $telegramService,
         OpenAIService $openAIService,
-        UserSessionService $sessionService
+        UserSessionService $sessionService,
+        TopicFinderService $topicFinderService
     ) {
         $this->telegramService = $telegramService;
         $this->openAIService = $openAIService;
         $this->sessionService = $sessionService;
+        $this->topicFinderService = $topicFinderService;
     }
 
     /**
@@ -406,8 +410,8 @@ class TelegramWebhookController extends Controller
         }
 
         try {
-            // Find the most suitable topic
-            $topic = $this->findBestTopic($question);
+            // Find the most suitable topic using AI
+            $topic = $this->topicFinderService->findBestTopicWithFallback($question);
 
             // Create new question
             Question::create([
@@ -459,51 +463,6 @@ class TelegramWebhookController extends Controller
         return null;
     }
 
-    /**
-     * Find the best matching topic for a question
-     */
-    private function findBestTopic(string $question): ?QuestionTopic
-    {
-        $topics = QuestionTopic::all();
-        $bestMatch = null;
-        $bestScore = 0;
-
-        foreach ($topics as $topic) {
-            $score = $this->calculateTopicScore($question, $topic->topic);
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestMatch = $topic;
-            }
-        }
-
-        // Only return topic if score is above threshold
-        return $bestScore > 0.3 ? $bestMatch : null;
-    }
-
-    /**
-     * Calculate similarity score between question and topic
-     */
-    private function calculateTopicScore(string $question, string $topic): float
-    {
-        $question = mb_strtolower($question);
-        $topic = mb_strtolower($topic);
-
-        // Simple keyword matching
-        $topicKeywords = explode(' ', $topic);
-        $questionWords = explode(' ', $question);
-
-        $matches = 0;
-        foreach ($topicKeywords as $keyword) {
-            foreach ($questionWords as $word) {
-                if (str_contains($word, $keyword) || str_contains($keyword, $word)) {
-                    $matches++;
-                    break;
-                }
-            }
-        }
-
-        return $matches / count($topicKeywords);
-    }
 
     /**
      * Get update type for logging
