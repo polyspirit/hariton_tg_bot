@@ -104,8 +104,17 @@ class OpenAIService
             }
         }
 
-        // Return only if similarity is high enough
-        return $highestSimilarity > 0.7 ? $mostSimilar : null;
+        // First attempt: strict similarity threshold
+        if ($highestSimilarity > 0.7) {
+            return $mostSimilar;
+        }
+
+        // Second attempt: more lenient search if nothing found
+        if ($highestSimilarity > 0.4) {
+            return $mostSimilar;
+        }
+
+        return null;
     }
 
     /**
@@ -220,7 +229,7 @@ class OpenAIService
                 $this->extractKeywords($similarQuestion->question)
             ) : 0;
 
-            $hasSimilarQuestion = $similarity > 0.7; // Повышаем порог схожести для более точного поиска
+            $hasSimilarQuestion = $similarity > 0.4; // Use flexible threshold - will be checked again in findMostSimilarQuestion
 
             // Если найден похожий вопрос, используем его ответ
             if ($hasSimilarQuestion) {
@@ -234,7 +243,7 @@ class OpenAIService
             $aiResponse = $this->generateResponse($prompt);
 
             if (!$aiResponse) {
-                return null;
+                return "Не знаю\n\nКоту Харитону был задан вопрос: " . $question . "\nКот Харитон ответил: Не знаю";
             }
 
             return $aiResponse . "\n\nОтвет основан на имеющихся в базе данных вопросах/ответах кота Харитона";
@@ -265,7 +274,8 @@ class OpenAIService
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'Ты должен отвечать только "Да" или "Нет".'
+                        'content' => 'Ты должен отвечать только "Да", "Нет" или "Не знаю".'
+                            . 'Если ты не уверен в ответе, отвечай "Не знаю".'
                             . 'Никаких дополнительных объяснений или текста.'
                     ],
                     [
