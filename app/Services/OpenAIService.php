@@ -25,15 +25,15 @@ class OpenAIService
      */
     public function generatePromptWithSimilarQuestions(string $question): string
     {
-        // Ищем точный вопрос в базе
+        // Search for exact question in database
         $exactQuestion = Question::where('question', $question)->first();
 
         if ($exactQuestion) {
-            // Если нашли точный вопрос, используем его и несколько похожих
+            // If we found the exact question, use it and some similar questions
             $similarQuestions = $this->findSimilarQuestions($question, 20);
             $questions = collect([$exactQuestion])->merge($similarQuestions);
         } else {
-            // Если точный вопрос не найден, ищем похожие
+            // If the exact question is not found, search for similar questions
             $questions = $this->findSimilarQuestions($question, 30);
         }
 
@@ -104,7 +104,8 @@ class OpenAIService
             }
         }
 
-        return $mostSimilar;
+        // Return only if similarity is high enough
+        return $highestSimilarity > 0.7 ? $mostSimilar : null;
     }
 
     /**
@@ -112,8 +113,10 @@ class OpenAIService
      */
     private function extractKeywords(string $question): array
     {
-        // Простая экстракция ключевых слов
-        $words = preg_split('/\s+/', mb_strtolower($question));
+        // Убираем знаки препинания и приводим к нижнему регистру
+        $cleanQuestion = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', mb_strtolower($question));
+        $words = preg_split('/\s+/', $cleanQuestion);
+
         $stopWords = [
             'вопрос',
             'что',
@@ -164,12 +167,29 @@ class OpenAIService
             'вверху',
             'внизу',
             'справа',
-            'слева'
+            'слева',
+            'существует',
+            'существует ли',
+            'есть ли',
+            'бывает ли',
+            'встречается ли'
         ];
 
-        return array_filter($words, function ($word) use ($stopWords) {
+        $keywords = array_filter($words, function ($word) use ($stopWords) {
             return !in_array($word, $stopWords) && mb_strlen($word) > 2;
         });
+
+        // Add check for exact match of keywords
+        $importantWords = ['нло', 'бог', 'бога', 'боги', 'инопланетяне', 'пришельцы', 'космос', 'вселенная'];
+        $hasImportantWords = false;
+        foreach ($importantWords as $importantWord) {
+            if (in_array($importantWord, $keywords)) {
+                $hasImportantWords = true;
+                break;
+            }
+        }
+
+        return $hasImportantWords ? $keywords : [];
     }
 
     /**
@@ -200,7 +220,7 @@ class OpenAIService
                 $this->extractKeywords($similarQuestion->question)
             ) : 0;
 
-            $hasSimilarQuestion = $similarity > 0.3; // Снижаем порог схожести
+            $hasSimilarQuestion = $similarity > 0.7; // Повышаем порог схожести для более точного поиска
 
             // Если найден похожий вопрос, используем его ответ
             if ($hasSimilarQuestion) {
