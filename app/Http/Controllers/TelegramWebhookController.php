@@ -6,6 +6,8 @@ use App\Services\TelegramBotService;
 use App\Services\OpenAIService;
 use App\Services\UserSessionService;
 use App\Models\TelegramUser;
+use App\Models\Question;
+use App\Models\QuestionTopic;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -83,6 +85,18 @@ class TelegramWebhookController extends Controller
             return;
         }
 
+        // Handle states for /add command
+        $userState = $this->sessionService->getState($userId);
+        if ($userState === 'add_waiting_question') {
+            $this->handleAddQuestionInput($chatId, $userId, $text, $firstName);
+            return;
+        }
+
+        if ($userState === 'add_waiting_answer') {
+            $this->handleAddAnswerInput($chatId, $userId, $text, $firstName);
+            return;
+        }
+
         // Handle regular messages with AI (any text without command is treated as a question)
         if (!empty($text)) {
             $this->handleAIMessage($chatId, $text, $firstName);
@@ -121,7 +135,7 @@ class TelegramWebhookController extends Controller
                 // Add admin commands to help if user is admin
                 if ($telegramUser->isAdmin()) {
                     $helpMessage .= "\n\n🔧 <b>Админские команды:</b>\n" .
-                        "/add - Добавить новый контент (в разработке)";
+                        "/add - Добавить новый вопрос с ответом";
                 }
 
                 $this->telegramService->sendMessage($chatId, $helpMessage);
@@ -335,11 +349,160 @@ class TelegramWebhookController extends Controller
             return;
         }
 
-        $addMessage = "🔧 <b>Команда /add</b>\n\n" .
-            "Эта команда находится в разработке.\n" .
-            "В будущем здесь будет возможность добавлять новый контент.";
+        $addMessage = "🔧 <b>Добавление нового вопроса</b>\n\n" .
+            "Пожалуйста, введите вопрос, который хотите добавить:";
 
+        $this->sessionService->setState($userId, 'add_waiting_question', 30);
         $this->telegramService->sendMessage($chatId, $addMessage);
+    }
+
+    /**
+     * Handle question input for /add command
+     */
+    private function handleAddQuestionInput(int $chatId, int $userId, string $text, string $firstName): void
+    {
+        if (empty(trim($text))) {
+            $this->telegramService->sendMessage($chatId, "❓ Пожалуйста, введите вопрос.");
+            return;
+        }
+
+        // Save question to session
+        $this->sessionService->setData($userId, 'add_question', $text);
+
+        // Change state to waiting for answer
+        $this->sessionService->setState($userId, 'add_waiting_answer', 30);
+
+        $answerMessage = "✅ <b>Вопрос сохранен:</b> {$text}\n\n" .
+            "Теперь введите ответ (да/нет, 1/0, true/false, yes/no):";
+
+        $this->telegramService->sendMessage($chatId, $answerMessage);
+    }
+
+    /**
+     * Handle answer input for /add command
+     */
+    private function handleAddAnswerInput(int $chatId, int $userId, string $text, string $firstName): void
+    {
+        if (empty(trim($text))) {
+            $this->telegramService->sendMessage($chatId, "❓ Пожалуйста, введите ответ.");
+            return;
+        }
+
+        // Convert answer to boolean
+        $answer = $this->convertToBoolean($text);
+        if ($answer === null) {
+            $errorMessage = "❌ Неверный формат ответа. Пожалуйста, используйте один из вариантов:\n" .
+                "• да/нет\n• 1/0\n• true/false\n• yes/no";
+            $this->telegramService->sendMessage($chatId, $errorMessage);
+            return;
+        }
+
+        // Get question from session
+        $question = $this->sessionService->getData($userId, 'add_question');
+        if (!$question) {
+            $this->sessionService->clearState($userId);
+            $this->telegramService->sendMessage($chatId, "❌ Ошибка: вопрос не найден. Начните заново с команды /add");
+            return;
+        }
+
+        try {
+            // Find the most suitable topic
+            $topic = $this->findBestTopic($question);
+
+            // Create new question
+            Question::create([
+                'question' => $question,
+                'answer' => $answer,
+                'topic_id' => $topic ? $topic->id : null,
+            ]);
+
+            $successMessage = "✅ <b>Вопрос успешно добавлен!</b>\n\n" .
+                "📝 <b>Вопрос:</b> {$question}\n" .
+                "✅ <b>Ответ:</b> " . ($answer ? 'Да' : 'Нет') . "\n" .
+                "🏷️ <b>Топик:</b> " . ($topic ? $topic->topic : 'Не определен');
+
+            $this->sessionService->clearState($userId);
+            $this->telegramService->sendMessage($chatId, $successMessage);
+        } catch (\Exception $e) {
+            Log::error('Error creating question', [
+                'chat_id' => $chatId,
+                'user_id' => $userId,
+                'question' => $question,
+                'answer' => $answer,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->sessionService->clearState($userId);
+            $errorMessage = "❌ Произошла ошибка при создании вопроса. Попробуйте позже.";
+            $this->telegramService->sendMessage($chatId, $errorMessage);
+        }
+    }
+
+    /**
+     * Convert text answer to boolean value
+     */
+    private function convertToBoolean(string $text): ?bool
+    {
+        $text = strtolower(trim($text));
+
+        $trueValues = ['да', 'yes', 'true', '1', 'давай', 'конечно', 'ага', 'угу'];
+        $falseValues = ['нет', 'no', 'false', '0', 'не', 'неа', 'не-а'];
+
+        if (in_array($text, $trueValues)) {
+            return true;
+        }
+
+        if (in_array($text, $falseValues)) {
+            return false;
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the best matching topic for a question
+     */
+    private function findBestTopic(string $question): ?QuestionTopic
+    {
+        $topics = QuestionTopic::all();
+        $bestMatch = null;
+        $bestScore = 0;
+
+        foreach ($topics as $topic) {
+            $score = $this->calculateTopicScore($question, $topic->topic);
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestMatch = $topic;
+            }
+        }
+
+        // Only return topic if score is above threshold
+        return $bestScore > 0.3 ? $bestMatch : null;
+    }
+
+    /**
+     * Calculate similarity score between question and topic
+     */
+    private function calculateTopicScore(string $question, string $topic): float
+    {
+        $question = mb_strtolower($question);
+        $topic = mb_strtolower($topic);
+
+        // Simple keyword matching
+        $topicKeywords = explode(' ', $topic);
+        $questionWords = explode(' ', $question);
+
+        $matches = 0;
+        foreach ($topicKeywords as $keyword) {
+            foreach ($questionWords as $word) {
+                if (str_contains($word, $keyword) || str_contains($keyword, $word)) {
+                    $matches++;
+                    break;
+                }
+            }
+        }
+
+        return $matches / count($topicKeywords);
     }
 
     /**
