@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\TelegramBotService;
 use App\Services\OpenAIService;
 use App\Services\UserSessionService;
+use App\Models\TelegramUser;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -73,9 +74,12 @@ class TelegramWebhookController extends Controller
             'user' => $firstName,
         ]);
 
+        // Check if user exists in database and get their role
+        $telegramUser = $this->getOrCreateTelegramUser($chatId, $userId, $firstName);
+
         // Handle commands
         if (str_starts_with($text, '/')) {
-            $this->handleCommand($chatId, $userId, $text, $firstName);
+            $this->handleCommand($chatId, $userId, $text, $firstName, $telegramUser);
             return;
         }
 
@@ -88,8 +92,13 @@ class TelegramWebhookController extends Controller
     /**
      * Handle bot commands
      */
-    private function handleCommand(int $chatId, int $userId, string $text, string $firstName): void
-    {
+    private function handleCommand(
+        int $chatId,
+        int $userId,
+        string $text,
+        string $firstName,
+        TelegramUser $telegramUser
+    ): void {
         $command = strtolower(trim($text));
 
         switch ($command) {
@@ -106,9 +115,14 @@ class TelegramWebhookController extends Controller
                     "/start - Начать работу с ботом\n" .
                     "/help - Показать справку\n" .
                     "/ask - Задать вопрос коту Харитону\n" .
-                    "/status - Проверить статус бота\n\n" .
                     "💡 <b>Важно:</b> Любое сообщение без команды автоматически обрабатывается как вопрос " .
                     "коту Харитону!";
+
+                // Add admin commands to help if user is admin
+                if ($telegramUser->isAdmin()) {
+                    $helpMessage .= "\n\n🔧 <b>Админские команды:</b>\n" .
+                        "/add - Добавить новый контент (в разработке)";
+                }
 
                 $this->telegramService->sendMessage($chatId, $helpMessage);
                 break;
@@ -123,9 +137,16 @@ class TelegramWebhookController extends Controller
                     "Имя: {$botInfo['first_name']}\n" .
                     "Username: @{$botInfo['username']}\n" .
                     "ID: {$botInfo['id']}\n\n" .
+                    "📊 <b>Информация о чате:</b>\n" .
+                    "Chat ID: {$chatId}\n" .
+                    "User ID: {$userId}\n\n" .
                     "Бот работает корректно!";
 
                 $this->telegramService->sendMessage($chatId, $statusMessage);
+                break;
+
+            case '/add':
+                $this->handleAddCommand($chatId, $userId, $firstName, $telegramUser);
                 break;
 
             default:
@@ -240,7 +261,6 @@ class TelegramWebhookController extends Controller
                     "/start - Начать работу с ботом\n" .
                     "/help - Показать справку\n" .
                     "/ask - Задать вопрос коту Харитону\n" .
-                    "/status - Проверить статус бота\n\n" .
                     "💡 <b>Важно:</b> Любое сообщение без команды автоматически обрабатывается как вопрос " .
                     "коту Харитону!";
 
@@ -269,6 +289,57 @@ class TelegramWebhookController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Get or create Telegram user
+     */
+    private function getOrCreateTelegramUser(int $chatId, int $userId, string $firstName): TelegramUser
+    {
+        $telegramUser = TelegramUser::where('user_id', $userId)->first();
+
+        if (!$telegramUser) {
+            // Create new user with default role 'user'
+            $telegramUser = TelegramUser::create([
+                'chat_id' => $chatId,
+                'user_id' => $userId,
+                'name' => $firstName,
+                'role' => 'user',
+            ]);
+
+            Log::info('Created new Telegram user', [
+                'chat_id' => $chatId,
+                'user_id' => $userId,
+                'name' => $firstName,
+                'role' => 'user',
+            ]);
+        } else {
+            // Update name if it has changed
+            if ($telegramUser->name !== $firstName) {
+                $telegramUser->update(['name' => $firstName]);
+            }
+        }
+
+        return $telegramUser;
+    }
+
+    /**
+     * Handle /add command (admin only)
+     */
+    private function handleAddCommand(int $chatId, int $userId, string $firstName, TelegramUser $telegramUser): void
+    {
+        // Check if user is admin
+        if (!$telegramUser->isAdmin()) {
+            $errorMessage = "❌ У вас нет прав для выполнения этой команды.";
+            $this->telegramService->sendMessage($chatId, $errorMessage);
+            return;
+        }
+
+        $addMessage = "🔧 <b>Команда /add</b>\n\n" .
+            "Эта команда находится в разработке.\n" .
+            "В будущем здесь будет возможность добавлять новый контент.";
+
+        $this->telegramService->sendMessage($chatId, $addMessage);
     }
 
     /**
