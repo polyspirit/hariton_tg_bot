@@ -229,7 +229,8 @@ class OpenAIService
                 $this->extractKeywords($similarQuestion->question)
             ) : 0;
 
-            $hasSimilarQuestion = $similarity > 0.4; // Use flexible threshold - will be checked again in findMostSimilarQuestion
+            // Use flexible threshold - will be checked again in findMostSimilarQuestion
+            $hasSimilarQuestion = $similarity > 0.4;
 
             // Если найден похожий вопрос, используем его ответ
             if ($hasSimilarQuestion) {
@@ -249,6 +250,41 @@ class OpenAIService
             return $aiResponse . "\n\nОтвет основан на имеющихся в базе данных вопросах/ответах кота Харитона";
         } catch (\Exception $e) {
             Log::error('Error asking AI question', [
+                'question' => $question,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Ask a question with enhanced similarity search using ChatGPT fallback
+     */
+    public function askWithEnhancedSearch(string $question): ?string
+    {
+        try {
+            // Use enhanced topic finder service for better question matching
+            $enhancedTopicFinder = app(\App\Services\EnhancedTopicFinderService::class);
+            $similarQuestion = $enhancedTopicFinder->findMostSimilarQuestionWithAI($question);
+
+            // Если найден похожий вопрос, используем его ответ
+            if ($similarQuestion) {
+                $answer = $similarQuestion->answer ? 'Да' : 'Нет';
+                return $answer . "\n\nКоту Харитону был задан вопрос: "
+                    . $similarQuestion->question . "\nКот Харитон ответил: " . $answer;
+            }
+
+            // Если похожего вопроса нет, используем ИИ
+            $prompt = $this->generatePromptWithSimilarQuestions($question);
+            $aiResponse = $this->generateResponse($prompt);
+
+            if (!$aiResponse) {
+                return "Не знаю\n\nКоту Харитону был задан вопрос: " . $question . "\nКот Харитон ответил: Не знаю";
+            }
+
+            return $aiResponse . "\n\nОтвет основан на имеющихся в базе данных вопросах/ответах кота Харитона";
+        } catch (\Exception $e) {
+            Log::error('Error asking AI question with enhanced search', [
                 'question' => $question,
                 'error' => $e->getMessage(),
             ]);
