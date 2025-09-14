@@ -73,19 +73,13 @@ class TelegramWebhookController extends Controller
             'user' => $firstName,
         ]);
 
-        // Check if user is in waiting state for /ask command
-        if ($this->sessionService->isInState($userId, 'waiting_for_question')) {
-            $this->handleQuestionInput($chatId, $userId, $text, $firstName);
-            return;
-        }
-
         // Handle commands
         if (str_starts_with($text, '/')) {
             $this->handleCommand($chatId, $userId, $text, $firstName);
             return;
         }
 
-        // Handle regular messages with AI
+        // Handle regular messages with AI (any text without command is treated as a question)
         if (!empty($text)) {
             $this->handleAIMessage($chatId, $text, $firstName);
         }
@@ -100,8 +94,9 @@ class TelegramWebhookController extends Controller
 
         switch ($command) {
             case '/start':
-                $welcomeMessage = "👋 Привет, {$firstName}!\n\nЯ AI-ассистент, готовый помочь вам с вопросами."
-                    . "Просто напишите мне, и я постараюсь ответить.\n\nИспользуйте /help для получения справки.";
+                $welcomeMessage = "👋 Привет, {$firstName}!\n\nЯ AI-ассистент, готовый помочь вам с вопросами.\n\n" .
+                    "💡 <b>Важно:</b> Любое сообщение без команды автоматически обрабатывается как вопрос " .
+                    "коту Харитону!\n\nИспользуйте /help для получения справки.";
 
                 $this->telegramService->sendMessage($chatId, $welcomeMessage);
                 break;
@@ -112,7 +107,8 @@ class TelegramWebhookController extends Controller
                     "/help - Показать справку\n" .
                     "/ask - Задать вопрос коту Харитону\n" .
                     "/status - Проверить статус бота\n\n" .
-                    "Просто напишите любой вопрос, и я постараюсь на него ответить!";
+                    "💡 <b>Важно:</b> Любое сообщение без команды автоматически обрабатывается как вопрос " .
+                    "коту Харитону!";
 
                 $this->telegramService->sendMessage($chatId, $helpMessage);
                 break;
@@ -245,7 +241,8 @@ class TelegramWebhookController extends Controller
                     "/help - Показать справку\n" .
                     "/ask - Задать вопрос коту Харитону\n" .
                     "/status - Проверить статус бота\n\n" .
-                    "Просто напишите любой вопрос, и я постараюсь на него ответить!";
+                    "💡 <b>Важно:</b> Любое сообщение без команды автоматически обрабатывается как вопрос " .
+                    "коту Харитону!";
 
                 $this->telegramService->sendMessage($chatId, $helpMessage);
                 break;
